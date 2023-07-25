@@ -1,5 +1,6 @@
 import pygame
 
+
 class Minesweeper:
     def __init__(self, width, height):
         self.width = width
