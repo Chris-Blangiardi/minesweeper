@@ -7,11 +7,11 @@ Description:
 A simple game of minesweeper. The game should abide by the normal rules of minesweeper.
 """
 
-import board
+import generate_board
 
 
 def main():
-    game = board.Minesweeper(1280, 720)
+    game = generate_board.Minesweeper()
     game.play()
 
 
