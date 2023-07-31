@@ -2,6 +2,7 @@ import random
 import time
 
 import pygame
+import visual
 
 
 class Minesweeper:
@@ -10,10 +11,17 @@ class Minesweeper:
         self.height = 720  # height of game window
 
         self.board = None  # stores the board for each game
-        self.board_size = (600, 600)  # size of the board regardless of difficulty
+        self.resolution = (600, 600)  # size of the board regardless of difficulty
 
         self.start = True  # enables start screen at program execution
         self.game_over = False  # enables game over screen on loss
+
+        self.visited = []  # tracks which tiles have been searched for mines
+        self.flagged = []  # tracks which tiles have been flagged by user
+
+        self.x_border = self.width / 2 - self.resolution[0] / 2  # controls the starting point of most drawn objects
+        self.y_border = self.height / 2 - self.resolution[0] / 2 + 40
+        self.border_width = 10  # border width
 
         """
         different difficulties within the game
@@ -89,90 +97,132 @@ class Minesweeper:
 
     def easy_mode(self, screen, clock):
         screen.fill("gray")  # screen background is gray
-        board_dimension = (10, 10)  # number of tiles in x and y dimension
+        tile_count = 10  # number of tiles in x and y dimension
         mine_count = 10  # number of mines in easy mode
-        tile_size = self.board_size[0] / board_dimension[0]  # the size of each tile to be drawn
+        tile_size = self.resolution[0] / tile_count  # the size of each tile to be drawn
 
-        self.generate_board(board_dimension)  # generate a virtual board with the given dimensions
-        self.generate_mines(board_dimension, mine_count)  # place mines in the generated board
+        self.generate_board(tile_count)
+        self.generate_mines(tile_count, mine_count)
 
-        x = self.width / 2 - self.board_size[0] / 2  # controls the starting point of where most objects are drawn
-        y = self.height / 2 - self.board_size[0] / 2
-
-        offset = 10  # border width
-
-        # border for tile area
-        pygame.draw.rect(screen, "black", (x - 10, y + 40, self.board_size[0] + 20, self.board_size[0] + 20), 10)
-
-        # create tiles
-        for row in range(board_dimension[0]):
-            for col in range(board_dimension[0]):
-                pygame.draw.rect(screen, "gray", (col * tile_size + x, row * tile_size + y + 50, tile_size, tile_size))
-                pygame.draw.rect(screen, "black", (col * tile_size + x, row * tile_size + y + 50, tile_size, tile_size),
-                                 1)
+        visual.draw_border(screen, self.x_border, self.y_border, self.border_width, self.resolution)
+        visual.draw_tiles(screen, self.x_border, self.y_border, self.border_width, tile_size, tile_count)
 
         while self.easy:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.easy = False
 
-                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:  # tile selection with left-click
                     mouse = pygame.mouse.get_pos()
                     left_clicked = True
                 else:
+                    mouse = pygame.mouse.get_pos()
                     left_clicked = False
 
-                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:  # flag with right-click
                     mouse = pygame.mouse.get_pos()
                     right_clicked = True
                 else:
                     right_clicked = False
 
-                if left_clicked:
-                    x_mouse = int((mouse[0] - offset) // tile_size)
-                    y_mouse = int((mouse[1] - 110) // tile_size)
-                    if 10 > x_mouse > -1 != self.board[y_mouse][x_mouse] and -1 < y_mouse < 10:
-                        pygame.draw.rect(screen, "black",
-                                         (x + tile_size * x_mouse, y + tile_size * y_mouse + 50, tile_size, tile_size))
-                        self.scan_adjacent(screen, x_mouse, y_mouse)
-                    else:
-                        self.game_over = True
+                if left_clicked and self.game_over is False:
+                    x = int((mouse[0] - self.border_width) // tile_size)
+                    y = int((mouse[1] - 110) // tile_size)
+                    if -1 < x < tile_count and -1 < y < tile_count:
+                        if self.board[y][x] != -1:
+                            self.scan_adjacent(screen, x, y, tile_size, tile_count, [])
+                        else:
+                            x_border, y_border = self.x_border, self.y_border
+                            visual.draw_explosion(screen, x_border, y_border, self.border_width, x, y, tile_size)
+                            self.game_over = True
+                            print("Game Over")
 
                 if right_clicked:
-                    x_mouse = (mouse[0] - offset) // tile_size
-                    y_mouse = (mouse[1] - 110) // tile_size
-                    if -1 < x_mouse < 10 and -1 < y_mouse < 10:
-                        pygame.draw.rect(screen, "gray",
-                                         (x + tile_size * x_mouse, y + tile_size * y_mouse + 50, tile_size, tile_size))
-                        pygame.draw.rect(screen, "black",
-                                         (x + tile_size * x_mouse, y + tile_size * y_mouse + 50, tile_size, tile_size),
-                                         1)
+                    x = (mouse[0] - self.border_width) // tile_size
+                    y = (mouse[1] - 110) // tile_size
+                    if -1 < x < 10 and -1 < y < 10:
+                        if (x, y) in self.flagged:
+                            self.flagged.remove((x, y))
+                            x_border, y_border = self.x_border, self.y_border
+                            visual.draw_flag(screen, x_border, y_border, self.border_width, x, y, tile_size, "gray")
+                        else:
+                            self.flagged.append((x, y))
+                            x_border, y_border = self.x_border, self.y_border
+                            visual.draw_flag(screen, x_border, y_border, self.border_width, x, y, tile_size, "white")
 
             pygame.display.flip()
             clock.tick(60)
 
-    def scan_adjacent(self, screen, x, y):
-        pass
+    def scan_adjacent(self, screen, x, y, tile_size, tile_count, to_visit):
+        potential_visit = []
+        must_visit = []
+
+        self.visited.append((x, y))
+
+        count = 0
+        for dx in range(-1, 2):
+            for dy in range(-1, 2):
+                if dx == 0 and dy == 0:
+                    continue
+                if 0 <= x + dx < tile_count and 0 <= y + dy < tile_count:
+                    if self.board[y + dy][x + dx] == -1:
+                        count += 1
+                    else:
+                        potential_visit.append((x + dx, y + dy))
+
+        if count > 0:
+            visual.draw_bomb_count(screen, self.x_border, self.y_border, self.border_width, x, y, tile_size, count)
+        else:
+            visual.draw_visited_tiles(screen, self.x_border, self.y_border, self.border_width, x, y, tile_size)
+            must_visit += potential_visit
+
+        while must_visit:
+            x, y = must_visit.pop(0)
+            if (x, y) not in self.visited:
+                self.scan_adjacent(screen, x, y, tile_size, tile_count, must_visit)
+
+        return
 
     def generate_board(self, dimensions):
-        self.board = [[0 for _ in range(dimensions[0])] for _ in range(dimensions[1])]
+        """
+        create and empty board
+
+        :param dimensions: size of the playing board (based on difficulty)
+        :return:
+        """
+        self.board = [[0 for _ in range(dimensions)] for _ in range(dimensions)]  # 2-dimensional array of zeros
 
     def generate_mines(self, dimensions, mine_count):
-        grid_width = dimensions[0]
-        grid_height = dimensions[1]
+        """
+        update empty board to have mines in it
+        - bombs are placed randomly each time
+        - bombs are indicated by the value -1
+
+        :param dimensions: size of the playing board (based on difficulty)
+        :param mine_count: number of mines to generate (based on difficulty)
+        :return:
+        """
+        width = dimensions
+        height = dimensions
         while mine_count > 0:
-            x, y = random.randint(0, grid_width - 1), random.randint(0, grid_height - 1)
+            x, y = random.randint(0, width - 1), random.randint(0, height - 1)
             if self.board[y][x] != -1:
                 self.board[y][x] = -1
                 mine_count -= 1
 
+        """
+        used for testing purposes (remove at the end)
+        """
         for row in self.board:
             print(row)
 
     def play(self):
         pygame.init()
+
         screen = pygame.display.set_mode((self.width, self.height))
+
         pygame.display.set_caption("Minesweeper")
+
         clock = pygame.time.Clock()
 
         self.start_screen(screen, clock)
