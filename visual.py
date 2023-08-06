@@ -111,3 +111,9 @@ def draw_flag(screen, x_border, y_border, offset, x, y, tile_size, color):
     location = (x * tile_size + x_border, y * tile_size + y_border + offset, tile_size, tile_size)
     pygame.draw.rect(screen, color, location)
     pygame.draw.rect(screen, "black", location, 1)
+
+
+def draw_time(screen, time):
+    minutes = time // 3600
+    seconds = time // 60
+    # print(time)

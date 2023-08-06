@@ -15,9 +15,11 @@ class Minesweeper:
 
         self.start = True  # enables start screen at program execution
         self.game_over = False  # enables game over screen on loss
+        self.win = False  # enables the win screen
 
         self.visited = []  # tracks which tiles have been searched for mines
         self.flagged = []  # tracks which tiles have been flagged by user
+        self.time = 0  # track playtime
 
         self.x_border = self.width / 2 - self.resolution[0] / 2  # controls the starting point of most drawn objects
         self.y_border = self.height / 2 - self.resolution[0] / 2 + 40
@@ -109,7 +111,7 @@ class Minesweeper:
 
         while self.easy:
             for event in pygame.event.get():
-                if event.type == pygame.QUIT:
+                if event.type == pygame.QUIT:  # checks for user quitting application
                     self.easy = False
 
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:  # tile selection with left-click
@@ -125,7 +127,12 @@ class Minesweeper:
                 else:
                     right_clicked = False
 
-                if left_clicked and self.game_over is False:
+                if self.check_win(tile_count, mine_count):
+                    self.game_over = True
+                    self.win = True
+                    print("You won")
+
+                if left_clicked and self.game_over is False:  # check to see if tile is a mine, empty, or near mine
                     x = int((mouse[0] - self.border_width) // tile_size)
                     y = int((mouse[1] - 110) // tile_size)
                     if -1 < x < tile_count and -1 < y < tile_count:
@@ -137,10 +144,10 @@ class Minesweeper:
                             self.game_over = True
                             print("Game Over")
 
-                if right_clicked:
+                if right_clicked and self.game_over is False:  # user can flag tile to track predicted mine locations
                     x = (mouse[0] - self.border_width) // tile_size
                     y = (mouse[1] - 110) // tile_size
-                    if -1 < x < 10 and -1 < y < 10:
+                    if -1 < x < tile_count and -1 < y < tile_count:
                         if (x, y) in self.flagged:
                             self.flagged.remove((x, y))
                             x_border, y_border = self.x_border, self.y_border
@@ -150,22 +157,36 @@ class Minesweeper:
                             x_border, y_border = self.x_border, self.y_border
                             visual.draw_flag(screen, x_border, y_border, self.border_width, x, y, tile_size, "white")
 
-            pygame.display.flip()
+            self.time += 1
+            visual.draw_time(screen, self.time)
+
             clock.tick(60)
+            pygame.display.flip()
 
-    def scan_adjacent(self, screen, x, y, tile_size, tile_count, to_visit):
-        potential_visit = []
-        must_visit = []
+    def scan_adjacent(self, screen, x, y, tile_size, tile_count, must_visit):
+        """
+        check tiles surrounding a visited tile if there is no mine near it
+        - runs recursively until it has found all tiles that have a mine near the selected tile
 
-        self.visited.append((x, y))
+        :param screen: pygame window
+        :param x: coordinate of where to start drawing
+        :param y: coordinate of where to start drawing
+        :param tile_size: varies with mode selection
+        :param tile_count: number of tiles in x and y direction
+        :param must_visit: list of tiles to visit
+        :return: None
+        """
+        potential_visit = []  # stores 8 tiles around a given tile
+
+        self.visited.append((x, y))  # mark current tile as visited
 
         count = 0
         for dx in range(-1, 2):
             for dy in range(-1, 2):
-                if dx == 0 and dy == 0:
+                if dx == 0 and dy == 0:  # pass over the current x, y coordinate
                     continue
-                if 0 <= x + dx < tile_count and 0 <= y + dy < tile_count:
-                    if self.board[y + dy][x + dx] == -1:
+                if 0 <= x + dx < tile_count and 0 <= y + dy < tile_count:  # verify tile is on the board
+                    if self.board[y + dy][x + dx] == -1:  # increase mine count otherwise potentially check in future
                         count += 1
                     else:
                         potential_visit.append((x + dx, y + dy))
@@ -188,7 +209,7 @@ class Minesweeper:
         create and empty board
 
         :param dimensions: size of the playing board (based on difficulty)
-        :return:
+        :return: None
         """
         self.board = [[0 for _ in range(dimensions)] for _ in range(dimensions)]  # 2-dimensional array of zeros
 
@@ -200,12 +221,12 @@ class Minesweeper:
 
         :param dimensions: size of the playing board (based on difficulty)
         :param mine_count: number of mines to generate (based on difficulty)
-        :return:
+        :return: None
         """
         width = dimensions
         height = dimensions
         while mine_count > 0:
-            x, y = random.randint(0, width - 1), random.randint(0, height - 1)
+            x, y = random.randint(0, width - 1), random.randint(0, height - 1)  # random spot to place mine
             if self.board[y][x] != -1:
                 self.board[y][x] = -1
                 mine_count -= 1
@@ -216,14 +237,29 @@ class Minesweeper:
         for row in self.board:
             print(row)
 
+    def check_win(self, dimensions, mine_count):
+        """
+        check to see if all tiles have been discovered that aren't bombs
+
+        :param dimensions: size of the playing board (based on difficulty)
+        :param mine_count: number of mines to generate (based on difficulty)
+        :return: True or False
+        """
+        if len(self.visited) == dimensions * dimensions - mine_count:
+            return True
+        else:
+            return False
+
     def play(self):
-        pygame.init()
+        """
+        pygame setup, brings user to the start screen
 
-        screen = pygame.display.set_mode((self.width, self.height))
-
-        pygame.display.set_caption("Minesweeper")
-
-        clock = pygame.time.Clock()
+        :return: None
+        """
+        pygame.init()  # initialize pygame
+        screen = pygame.display.set_mode((self.width, self.height))  # create a game window with set dimensions
+        pygame.display.set_caption("Minesweeper")  # title for the game window
+        clock = pygame.time.Clock()  # used to keep track of time
 
         self.start_screen(screen, clock)
 
